@@ -320,6 +320,11 @@ void TestCapabilitiesSerialize316317Fields()
     server_capabilities.workspace = WorkspaceServerCapabilities();
     server_capabilities.workspace->fileOperations = WorkspaceServerCapabilities::lsFileOperations();
     server_capabilities.workspace->fileOperations->willCreate = lsFileOperationRegistrationOptions();
+    lsFileSystemWatcher watcher;
+    watcher.globPattern = "**/*.{bas,bi}";
+    watcher.kind = 7;
+    server_capabilities.workspace->didChangeWatchedFiles = lsDidChangeWatchedFilesOptions();
+    server_capabilities.workspace->didChangeWatchedFiles->watchers.push_back(watcher);
 
     std::string const server_json = SerializeJson(server_capabilities);
     Expect(
@@ -334,6 +339,10 @@ void TestCapabilitiesSerialize316317Fields()
     Expect(server_json.find("\"inlayHintProvider\"") != std::string::npos, "server capabilities must expose inlayHintProvider");
     Expect(server_json.find("\"resolveProvider\":true") != std::string::npos, "inlay hint provider must expose resolveProvider");
     Expect(server_json.find("\"fileOperations\"") != std::string::npos, "workspace capabilities must expose fileOperations");
+    Expect(
+        server_json.find("\"didChangeWatchedFiles\":{\"watchers\":[{\"globPattern\":\"**/*.{bas,bi}\",\"kind\":7}]}") !=
+            std::string::npos,
+        "workspace capabilities must expose didChangeWatchedFiles watchers");
 
     lsTextDocumentClientCapabilities text_document_capabilities;
     text_document_capabilities.semanticTokens = SemanticTokensClientCapabilities();

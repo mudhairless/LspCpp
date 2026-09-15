@@ -2,6 +2,7 @@
 #include "LibLsp/lsp/ProtocolJsonHandler.h"
 #include "LibLsp/lsp/AbsolutePath.h"
 #include "LibLsp/lsp/Directory.h"
+#include "LibLsp/lsp/client/registerCapability.h"
 #include "LibLsp/lsp/lsDocumentUri.h"
 #include "LibLsp/lsp/utils.h"
 #include "LibLsp/lsp/general/initialize.h"
@@ -40,6 +41,7 @@
 #include "LibLsp/lsp/textDocument/did_save.h"
 #include "LibLsp/lsp/textDocument/willSave.h"
 #include "LibLsp/lsp/windows/MessageNotify.h"
+#include "LibLsp/lsp/workspace/did_change_watched_files.h"
 #include "protocol_test_helpers.h"
 #include "test_helpers.h"
 
@@ -1150,6 +1152,148 @@ void TestTypeGuardInspiredMalformedInputs()
         "MarkedString object form must parse value");
 }
 
+void TestWatchedFilesOptionsRoundTrip()
+{
+    lsFileSystemWatcher watcher;
+    watcher.globPattern = "**/*.{bas,bi}";
+    watcher.kind = 7;
+
+    std::string const watcher_json = SerializeJson(watcher);
+    Expect(
+        watcher_json.find("\"globPattern\":\"**/*.{bas,bi}\"") != std::string::npos,
+        "file system watcher must serialize globPattern");
+    Expect(watcher_json.find("\"kind\":7") != std::string::npos, "file system watcher must serialize kind");
+
+    lsFileSystemWatcher const watcher_copy = RoundTrip(watcher);
+    Expect(
+        watcher_copy.globPattern == "**/*.{bas,bi}",
+        "file system watcher globPattern must round-trip");
+    Expect(watcher_copy.kind && *watcher_copy.kind == 7, "file system watcher kind must round-trip");
+
+    lsFileSystemWatcher const parsed_watcher = ParseJson<lsFileSystemWatcher>(R"({"globPattern":"**/*.{bas,bi}","kind":7})");
+    Expect(
+        parsed_watcher.globPattern == "**/*.{bas,bi}" && parsed_watcher.kind && *parsed_watcher.kind == 7,
+        "file system watcher JSON must parse globPattern and kind");
+
+    lsFileSystemWatcher kindless_watcher;
+    kindless_watcher.globPattern = "*.bi";
+    std::string const kindless_json = SerializeJson(kindless_watcher);
+    Expect(
+        kindless_json.find("\"kind\"") == std::string::npos,
+        "file system watcher with no kind must omit the field");
+    Expect(
+        kindless_json.find("\"globPattern\":\"*.bi\"") != std::string::npos,
+        "file system watcher with no kind must still serialize globPattern");
+
+    lsDidChangeWatchedFilesOptions options;
+    options.watchers.push_back(watcher);
+    options.watchers.push_back(kindless_watcher);
+    lsDidChangeWatchedFilesOptions const options_copy = RoundTrip(options);
+    Expect(
+        options_copy.watchers.size() == 2 && options_copy.watchers[0].globPattern == "**/*.{bas,bi}",
+        "didChangeWatchedFiles options must round-trip the watcher list");
+
+    lsDidChangeWatchedFilesOptions const parsed_options = ParseJson<lsDidChangeWatchedFilesOptions>(
+        R"({"watchers":[{"globPattern":"**/*.{bas,bi}","kind":7}]})");
+    Expect(
+        parsed_options.watchers.size() == 1 && parsed_options.watchers[0].globPattern == "**/*.{bas,bi}" &&
+            parsed_options.watchers[0].kind && *parsed_options.watchers[0].kind == 7,
+        "didChangeWatchedFiles options JSON must parse watchers");
+}
+
+void TestRegistrationRegisterOptionsRoundTrip()
+{
+    Registration registration;
+    registration.id = "watcher-1";
+    registration.method = "workspace/didChangeWatchedFiles";
+    std::string const bare_json = SerializeJson(registration);
+    Expect(
+        bare_json.find("\"method\":\"workspace/didChangeWatchedFiles\"") != std::string::npos,
+        "registration must serialize method");
+    Expect(
+        bare_json.find("registerOptions") == std::string::npos,
+        "registration without registerOptions must omit the field");
+
+    lsp::Any options;
+    options.SetJsonString(R"({"watchers":[{"globPattern":"**/*.{bas,bi}","kind":7}]})", lsp::Any::kObjectType);
+    registration.registerOptions.emplace(std::move(options));
+    std::string const with_options_json = SerializeJson(registration);
+    Expect(
+        with_options_json.find("\"registerOptions\":{\"watchers\"") != std::string::npos,
+        "registration must serialize registerOptions watchers");
+    Expect(
+        with_options_json.find("\"globPattern\":\"**/*.{bas,bi}\"") != std::string::npos,
+        "registration registerOptions must carry the watcher glob pattern");
+    Expect(
+        with_options_json.find("\"kind\":7") != std::string::npos,
+        "registration registerOptions must carry the watcher kind");
+
+    Registration const parsed_registration = ParseJson<Registration>(R"({
+        "id": "watcher-1",
+        "method": "workspace/didChangeWatchedFiles",
+        "registerOptions": {"watchers": [{"globPattern": "**/*.{bas,bi}", "kind": 7}]}
+    })");
+    Expect(
+        parsed_registration.id == "watcher-1" && parsed_registration.method == "workspace/didChangeWatchedFiles",
+        "registration must parse id and method");
+    Expect(
+        parsed_registration.registerOptions &&
+            parsed_registration.registerOptions->Data().find("\"globPattern\":\"**/*.{bas,bi}\"") != std::string::npos,
+        "registration registerOptions must parse the watcher payload");
+
+    RegistrationParams const parsed_params = ParseJson<RegistrationParams>(R"({
+        "registrations": [
+            {"id": "watcher-1", "method": "workspace/didChangeWatchedFiles",
+             "registerOptions": {"watchers": [{"globPattern": "**/*.{bas,bi}", "kind": 7}]}}
+        ]
+    })");
+    Expect(
+        parsed_params.registrations.size() == 1 &&
+            parsed_params.registrations[0].method == "workspace/didChangeWatchedFiles",
+        "registration params must parse the registration list");
+    Expect(
+        parsed_params.registrations[0].registerOptions &&
+            parsed_params.registrations[0].registerOptions->Data().find("\"watchers\"") != std::string::npos,
+        "registration params registerOptions must parse watchers");
+}
+
+void TestWatchedFilesStaticsCapabilityRoundTrip()
+{
+    lsFileSystemWatcher watcher;
+    watcher.globPattern = "**/*.{bas,bi}";
+    watcher.kind = 7;
+
+    lsServerCapabilities capabilities;
+    capabilities.workspace = WorkspaceServerCapabilities();
+    capabilities.workspace->didChangeWatchedFiles = lsDidChangeWatchedFilesOptions();
+    capabilities.workspace->didChangeWatchedFiles->watchers.push_back(watcher);
+
+    std::string const json = SerializeJson(capabilities);
+    Expect(
+        json.find("\"didChangeWatchedFiles\":{\"watchers\":[{\"globPattern\":\"**/*.{bas,bi}\",\"kind\":7}]}") !=
+            std::string::npos,
+        "server capabilities must serialize the static didChangeWatchedFiles watchers");
+
+    lsServerCapabilities const round_tripped = RoundTrip(capabilities);
+    Expect(
+        round_tripped.workspace && round_tripped.workspace->didChangeWatchedFiles &&
+            round_tripped.workspace->didChangeWatchedFiles->watchers.size() == 1 &&
+            round_tripped.workspace->didChangeWatchedFiles->watchers[0].globPattern == "**/*.{bas,bi}" &&
+            round_tripped.workspace->didChangeWatchedFiles->watchers[0].kind &&
+            *round_tripped.workspace->didChangeWatchedFiles->watchers[0].kind == 7,
+        "server capabilities must round-trip the static didChangeWatchedFiles watchers");
+}
+
+void TestProtocolJsonHandlerParsesRegisterCapabilityRequest()
+{
+    lsp::ProtocolJsonHandler handler;
+    ExpectParsesRequest(
+        handler,
+        Req_ClientRegisterCapability::request::kMethodInfo,
+        R"({"jsonrpc":"2.0","id":50,"method":"client/registerCapability","params":{"registrations":[{"id":"watcher-1","method":"workspace/didChangeWatchedFiles","registerOptions":{"watchers":[{"globPattern":"**/*.{bas,bi}","kind":7}]}}]}})",
+        "ProtocolJsonHandler must parse client/registerCapability requests with registerOptions");
+}
+
 void TestProgressTokenParamsRoundTrip()
 {
     lsInitializeParams const initialize_params = ParseJson<lsInitializeParams>(
@@ -1492,6 +1636,9 @@ int main(int argc, char** argv)
     RUN_TEST(TestCompletionResponseArrayVsList);
     RUN_TEST(TestCodeActionEitherVariants);
     RUN_TEST(TestWorkspaceEditDocumentChanges);
+    RUN_TEST(TestWatchedFilesOptionsRoundTrip);
+    RUN_TEST(TestRegistrationRegisterOptionsRoundTrip);
+    RUN_TEST(TestWatchedFilesStaticsCapabilityRoundTrip);
     RUN_TEST(TestHoverContentsAllRepresentations);
     RUN_TEST(TestTypeGuardInspiredMalformedInputs);
     RUN_TEST(TestProgressTokenParamsRoundTrip);
@@ -1499,6 +1646,7 @@ int main(int argc, char** argv)
     RUN_TEST(TestProtocolJsonHandlerParsesPolymorphicResponseEnvelopes);
     RUN_TEST(TestProtocolJsonHandlerParsesErrorResponses);
     RUN_TEST(TestProtocolJsonHandlerRegistersCoreRequestsAndNotifications);
+    RUN_TEST(TestProtocolJsonHandlerParsesRegisterCapabilityRequest);
     RUN_TEST(TestProtocolJsonHandlerParsesNoParamsMessages);
     return test::Failures() == 0 ? 0 : 1;
 }
