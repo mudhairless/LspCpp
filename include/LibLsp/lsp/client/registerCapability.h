@@ -1,6 +1,7 @@
 #pragma once
 #include "LibLsp/JsonRpc/message.h"
 #include "LibLsp/lsp/lsDocumentUri.h"
+#include "LibLsp/lsp/lsAny.h"
 
 /**
  * General parameters to register for a capability.
@@ -21,10 +22,15 @@ struct Registration
 
     std::string method;
 
-    MAKE_SWAP_METHOD(Registration, id, method);
+    /**
+         * Options for the registration (e.g. DidChangeWatchedFilesRegistrationOptions).
+         */
+    optional<lsp::Any> registerOptions;
+
+    MAKE_SWAP_METHOD(Registration, id, method, registerOptions);
 };
 
-MAKE_REFLECT_STRUCT(Registration, id, method);
+MAKE_REFLECT_STRUCT(Registration, id, method, registerOptions);
 
 /**
  * The client/registerCapability request is sent from the server to the client to register

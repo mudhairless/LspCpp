@@ -8,6 +8,7 @@
 #include "InitializeParams.h"
 #include "LibLsp/lsp/textDocument/SemanticTokens.h"
 #include "LibLsp/lsp/protocol_3_18.h"
+#include "LibLsp/lsp/workspace/did_change_watched_files.h"
 
 extern void Reflect(Reader&, std::pair<optional<lsTextDocumentSyncKind>, optional<lsTextDocumentSyncOptions>>&);
 
@@ -318,11 +319,18 @@ struct WorkspaceServerCapabilities
     };
     optional<lsFileOperations> fileOperations;
 
+    //
+    // The server is interested in workspace/didChangeWatchedFiles events
+    // (static registration; the dynamic path registers the same method via
+    // client/registerCapability after `initialized`).
+    //
+    optional<lsDidChangeWatchedFilesOptions> didChangeWatchedFiles;
+
     optional<TextDocumentContentOptions> textDocumentContentProvider;
 
-    MAKE_SWAP_METHOD(WorkspaceServerCapabilities, workspaceFolders, fileOperations, textDocumentContentProvider)
+    MAKE_SWAP_METHOD(WorkspaceServerCapabilities, workspaceFolders, fileOperations, didChangeWatchedFiles, textDocumentContentProvider)
 };
-MAKE_REFLECT_STRUCT(WorkspaceServerCapabilities, workspaceFolders, fileOperations, textDocumentContentProvider)
+MAKE_REFLECT_STRUCT(WorkspaceServerCapabilities, workspaceFolders, fileOperations, didChangeWatchedFiles, textDocumentContentProvider)
 MAKE_REFLECT_STRUCT(
     WorkspaceServerCapabilities::lsFileOperations, didCreate, willCreate, didRename, willRename, didDelete, willDelete
 )

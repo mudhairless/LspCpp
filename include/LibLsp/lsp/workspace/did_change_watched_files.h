@@ -19,6 +19,32 @@ MAKE_REFLECT_TYPE_PROXY(lsFileChangeType);
 #endif
 
 /**
+ * A file the server wants change events for. `kind` is a WatchKind bitmask
+ * (Create = 1 | Change = 2 | Delete = 4); omitted defaults to 7 (all three).
+ */
+struct lsFileSystemWatcher
+{
+    std::string globPattern;
+    optional<int> kind;
+
+    MAKE_SWAP_METHOD(lsFileSystemWatcher, globPattern, kind);
+};
+MAKE_REFLECT_STRUCT(lsFileSystemWatcher, globPattern, kind);
+
+/**
+ * Watchers for `workspace/didChangeWatchedFiles`: carried both as the static
+ * initialize capability (workspace.didChangeWatchedFiles) and inside a
+ * `client/registerCapability` registration's registerOptions.
+ */
+struct lsDidChangeWatchedFilesOptions
+{
+    std::vector<lsFileSystemWatcher> watchers;
+
+    MAKE_SWAP_METHOD(lsDidChangeWatchedFilesOptions, watchers);
+};
+MAKE_REFLECT_STRUCT(lsDidChangeWatchedFilesOptions, watchers);
+
+/**
  * An event describing a file change.
  */
 struct lsFileEvent
