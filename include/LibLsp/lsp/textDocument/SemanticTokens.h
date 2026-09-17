@@ -239,16 +239,16 @@ MAKE_REFLECT_STRUCT(SemanticTokensDeltaParams, textDocument, previousResultId)
 /// Describes a a replacement of a contiguous range of semanticTokens.
 struct SemanticTokensEdit
 {
-    // LSP specifies `start` and `deleteCount` which are relative to the array
-    // encoding of the previous tokens.
-    // We use token counts instead, and translate when serializing this struct.
-    unsigned startToken = 0;
-    unsigned deleteTokens = 0;
-    std::vector<int32_t> tokens; // encoded as a flat integer array
+    // LSP `start`/`deleteCount` are offsets into the flattened `data` array
+    // (element units: five integers per token); `data` carries the inserted
+    // elements.
+    unsigned start = 0;
+    unsigned deleteCount = 0;
+    std::vector<int32_t> data; // encoded as a flat integer array
 
-    MAKE_REFLECT_STRUCT(SemanticTokensEdit, startToken, deleteTokens, tokens)
+    MAKE_REFLECT_STRUCT(SemanticTokensEdit, start, deleteCount, data)
 };
-MAKE_REFLECT_STRUCT(SemanticTokensEdit, startToken, deleteTokens, tokens)
+MAKE_REFLECT_STRUCT(SemanticTokensEdit, start, deleteCount, data)
 
 /// This models LSP SemanticTokensDelta | SemanticTokens, which is the result of
 /// textDocument/semanticTokens/full/delta.

@@ -25,6 +25,7 @@
 #include "LibLsp/lsp/textDocument/publishDiagnostics.h"
 #include "LibLsp/lsp/textDocument/references.h"
 #include "LibLsp/lsp/textDocument/rename.h"
+#include "LibLsp/lsp/textDocument/SemanticTokens.h"
 #include "LibLsp/lsp/textDocument/signature_help.h"
 #include "LibLsp/lsp/workspace/execute_command.h"
 #include "LibLsp/lsp/workspace/symbol.h"
@@ -1284,6 +1285,50 @@ void TestWatchedFilesStaticsCapabilityRoundTrip()
         "server capabilities must round-trip the static didChangeWatchedFiles watchers");
 }
 
+void TestSemanticTokensEditWireShape()
+{
+    // LspCpp models the edit with protocol field names and units. Guard the
+    // wire shape: `start`/`deleteCount` index the flat `data` array in element
+    // units (five integers per token), and `data` carries the inserted
+    // elements. The type must not leak any internal `startToken`/`tokens`
+    // names.
+    SemanticTokensEdit edit;
+    edit.start = 10;
+    edit.deleteCount = 15;
+    edit.data = {0, 1, 2, 3, 4};
+
+    std::string const edit_json = SerializeJson(edit);
+    Expect(
+        edit_json == R"({"start":10,"deleteCount":15,"data":[0,1,2,3,4]})",
+        "semantic token edit must serialize the spec start/deleteCount/data shape");
+
+    SemanticTokensEdit const edit_copy = RoundTrip(edit);
+    Expect(
+        edit_copy.start == 10 && edit_copy.deleteCount == 15 && edit_copy.data == edit.data,
+        "semantic token edit must round-trip through the spec shape");
+
+    SemanticTokensOrDelta delta;
+    delta.resultId = "st7";
+    delta.edits = std::vector<SemanticTokensEdit>{edit};
+    Expect(
+        SerializeJson(delta) == R"({"resultId":"st7","edits":[{"start":10,"deleteCount":15,"data":[0,1,2,3,4]}]})",
+        "semantic token delta must serialize the spec edit shape");
+
+    SemanticTokensOrDelta const delta_copy = RoundTrip(delta);
+    Expect(
+        delta_copy.resultId && *delta_copy.resultId == "st7" && delta_copy.edits && delta_copy.edits->size() == 1 &&
+            delta_copy.edits->front().start == 10 && delta_copy.edits->front().deleteCount == 15 &&
+            delta_copy.edits->front().data == edit.data,
+        "semantic token delta must round-trip the edit list");
+
+    SemanticTokensOrDelta full_fallback;
+    full_fallback.resultId = "st8";
+    full_fallback.tokens = std::vector<int32_t>{0, 0, 3, 0, 0};
+    Expect(
+        SerializeJson(full_fallback) == R"({"resultId":"st8","tokens":[0,0,3,0,0]})",
+        "semantic token delta must serialize a full-token fallback through the tokens arm");
+}
+
 void TestProtocolJsonHandlerParsesRegisterCapabilityRequest()
 {
     lsp::ProtocolJsonHandler handler;
@@ -1639,6 +1684,7 @@ int main(int argc, char** argv)
     RUN_TEST(TestWatchedFilesOptionsRoundTrip);
     RUN_TEST(TestRegistrationRegisterOptionsRoundTrip);
     RUN_TEST(TestWatchedFilesStaticsCapabilityRoundTrip);
+    RUN_TEST(TestSemanticTokensEditWireShape);
     RUN_TEST(TestHoverContentsAllRepresentations);
     RUN_TEST(TestTypeGuardInspiredMalformedInputs);
     RUN_TEST(TestProgressTokenParamsRoundTrip);
