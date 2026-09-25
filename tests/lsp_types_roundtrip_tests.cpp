@@ -985,6 +985,7 @@ void TestCodeActionEitherVariants()
     quick_fix.title = "Insert 'END TYPE'";
     quick_fix.kind = std::string("quickfix");
     quick_fix.edit.emplace();
+    quick_fix.edit->changes.emplace();
     lsTextEdit closer;
     closer.range = lsRange(lsPosition(4, 0), lsPosition(4, 0));
     closer.newText = "END TYPE\n";
@@ -1000,10 +1001,11 @@ void TestCodeActionEitherVariants()
         "CodeAction without a command must omit the command member");
 
     TextDocumentCodeAction::Either const edit_copy = RoundTrip(edit_either);
-    Expect(
-        edit_copy.second && edit_copy.second->edit && edit_copy.second->edit->changes &&
-            edit_copy.second->edit->changes->count("file:///tmp/main.bas") == 1 &&
-            (*edit_copy.second->edit->changes)["file:///tmp/main.bas"].front().newText == "END TYPE\n",
+    std::vector<lsTextEdit> const round_tripped =
+        edit_copy.second && edit_copy.second->edit && edit_copy.second->edit->changes
+            ? edit_copy.second->edit->changes->at("file:///tmp/main.bas")
+            : std::vector<lsTextEdit>();
+    Expect(round_tripped.size() == 1 && round_tripped.front().newText == "END TYPE\n",
         "CodeAction edit variant must round-trip the workspace edit");
 }
 
