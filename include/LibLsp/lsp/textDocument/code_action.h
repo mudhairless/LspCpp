@@ -4,6 +4,7 @@
 #include "LibLsp/JsonRpc/lsResponseMessage.h"
 #include "LibLsp/lsp/lsTextDocumentIdentifier.h"
 #include "LibLsp/lsp/CodeActionParams.h"
+#include "LibLsp/lsp/lsCodeAction.h"
 
 namespace QuickAssistProcessor
 {
@@ -42,6 +43,11 @@ extern char const* CONVERT_ANONYMOUS_CLASS_TO_NESTED_COMMAND; // "convertAnonymo
  * Registration Options: TextDocumentRegistrationOptions
  */
 
+// The response is `(Command | CodeAction)[]` (LSP 3.17, textDocument/codeAction):
+// a Command is a reference the client executes, a CodeAction carries the
+// workspace edit the client applies. A server that only ever answers with
+// Commands cannot express an edit at all, so the result is the Either variant
+// rather than a bare lsCommandWithAny.
 DEFINE_REQUEST_RESPONSE_TYPE(
-    td_codeAction, lsCodeActionParams, std::vector<lsCommandWithAny>, "textDocument/codeAction"
+    td_codeAction, lsCodeActionParams, std::vector<TextDocumentCodeAction::Either>, "textDocument/codeAction"
 );

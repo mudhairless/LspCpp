@@ -52,3 +52,4 @@ struct TextDocumentCodeAction
 };
 
 extern void Reflect(Reader& visitor, TextDocumentCodeAction::Either& value);
+extern void Reflect(Writer& visitor, TextDocumentCodeAction::Either& value);

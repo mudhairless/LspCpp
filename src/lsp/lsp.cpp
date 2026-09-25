@@ -218,6 +218,24 @@ void Reflect(Reader& visitor, TextDocumentCodeAction::Either& value)
     }
 }
 
+void Reflect(Writer& visitor, TextDocumentCodeAction::Either& value)
+{
+    if (value.first)
+    {
+        Reflect(visitor, value.first.value());
+    }
+    else if (value.second)
+    {
+        Reflect(visitor, value.second.value());
+    }
+    else
+    {
+        // An empty element is a legal `null` in the (Command | CodeAction)[]
+        // the spec defines; a server simply has no reason to send one.
+        visitor.Null();
+    }
+}
+
 void Reflect(Reader& visitor, lsWorkspaceEdit::Either& value)
 {
 

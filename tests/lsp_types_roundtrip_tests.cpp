@@ -974,6 +974,37 @@ void TestCodeActionEitherVariants()
         parsed_title_only.second && parsed_title_only.second->title == "Refactor this",
         "title-only CodeAction JSON must parse as CodeAction variant");
     Expect(!parsed_title_only.first, "title-only CodeAction JSON must not populate Command side");
+
+    // The variant a server actually answers with: a CodeAction carrying the
+    // edit the client applies. Both the round trip and the emitted JSON matter
+    // — `edit.changes` is keyed by document URI, and an unset `command` must
+    // be omitted rather than serialized as an empty id the client would try to
+    // execute.
+    TextDocumentCodeAction::Either edit_either;
+    CodeAction quick_fix;
+    quick_fix.title = "Insert 'END TYPE'";
+    quick_fix.kind = std::string("quickfix");
+    quick_fix.edit.emplace();
+    lsTextEdit closer;
+    closer.range = lsRange(lsPosition(4, 0), lsPosition(4, 0));
+    closer.newText = "END TYPE\n";
+    (*quick_fix.edit->changes)["file:///tmp/main.bas"].push_back(closer);
+    edit_either.second = quick_fix;
+
+    std::string const edit_json = SerializeJson(edit_either);
+    Expect(
+        edit_json.find(R"("edit":{"changes":{"file:///tmp/main.bas":)") != std::string::npos,
+        "CodeAction edit variant must serialize the edit keyed by document URI");
+    Expect(
+        edit_json.find("\"command\"") == std::string::npos,
+        "CodeAction without a command must omit the command member");
+
+    TextDocumentCodeAction::Either const edit_copy = RoundTrip(edit_either);
+    Expect(
+        edit_copy.second && edit_copy.second->edit && edit_copy.second->edit->changes &&
+            edit_copy.second->edit->changes->count("file:///tmp/main.bas") == 1 &&
+            (*edit_copy.second->edit->changes)["file:///tmp/main.bas"].front().newText == "END TYPE\n",
+        "CodeAction edit variant must round-trip the workspace edit");
 }
 
 void TestWorkspaceEditDocumentChanges()
