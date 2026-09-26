@@ -189,12 +189,19 @@ function(lspcpp_set_target_options target)
     set_property(TARGET ${target} PROPERTY CXX_EXTENSIONS OFF)
 
     if (CMAKE_GENERATOR MATCHES "Visual Studio.*")
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost 1.76.0.0)
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_chrono-vc141 1.76.0.0)
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_date_time-vc141 1.76.0.0)
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_filesystem-vc141 1.76.0.0)
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_program_options-vc141 1.76.0.0)
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_system-vc141 1.76.0.0)
+        # Only when boost is actually used. The boost block above gates on
+        # LSPCPP_STANDALONE_ASIO for the same reason: standalone asio needs no
+        # boost, and asking a Visual Studio generator for the nuget boost
+        # packages then fails configuration outright, with "Can't find target
+        # of boost.1.76.0.0", for a dependency the build does not have.
+        if (NOT LSPCPP_STANDALONE_ASIO)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_chrono-vc141 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_date_time-vc141 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_filesystem-vc141 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_program_options-vc141 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_system-vc141 1.76.0.0)
+        endif()
         lspcpp_set_target_options_with_nuget_pkg(${target} boost_thread-vc141 1.76.0.0)
     endif()
 
