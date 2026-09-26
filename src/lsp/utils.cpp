@@ -18,6 +18,9 @@
 #include "LibLsp/lsp/lsPosition.h"
 #include "utf8.h"
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
 #else
 #include <unistd.h>
