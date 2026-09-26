@@ -201,8 +201,8 @@ function(lspcpp_set_target_options target)
             lspcpp_set_target_options_with_nuget_pkg(${target} boost_filesystem-vc141 1.76.0.0)
             lspcpp_set_target_options_with_nuget_pkg(${target} boost_program_options-vc141 1.76.0.0)
             lspcpp_set_target_options_with_nuget_pkg(${target} boost_system-vc141 1.76.0.0)
+            lspcpp_set_target_options_with_nuget_pkg(${target} boost_thread-vc141 1.76.0.0)
         endif()
-        lspcpp_set_target_options_with_nuget_pkg(${target} boost_thread-vc141 1.76.0.0)
     endif()
 
     # Enable all warnings
