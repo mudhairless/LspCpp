@@ -16,6 +16,7 @@
 #include "LibLsp/lsp/lsMarkedString.h"
 #include "LibLsp/lsp/lsWorkspaceEdit.h"
 #include "LibLsp/lsp/textDocument/code_action.h"
+#include "LibLsp/lsp/protocol_3_18.h"
 #include "LibLsp/lsp/textDocument/document_symbol.h"
 #include "LibLsp/lsp/extention/jdtls/codeActionResult.h"
 
@@ -233,6 +234,41 @@ void Reflect(Writer& visitor, TextDocumentCodeAction::Either& value)
         // An empty element is a legal `null` in the (Command | CodeAction)[]
         // the spec defines; a server simply has no reason to send one.
         visitor.Null();
+    }
+}
+
+void Reflect(Reader& visitor, DocumentDiagnosticReport::Either& value)
+{
+    // Discriminate on the `kind` member: a full report carries `items` (plus
+    // optional `relatedDocuments`), an unchanged report carries only a
+    // `resultId`. Reading the member first keeps an absent kind or a kind
+    // the union does not know on the full arm, which is where the items are.
+    if (visitor.HasMember("kind") && visitor["kind"]->IsString() &&
+        visitor["kind"]->GetString() == std::string("unchanged"))
+    {
+        Reflect(visitor, value.second);
+    }
+    else
+    {
+        Reflect(visitor, value.first);
+    }
+}
+
+void Reflect(Writer& visitor, DocumentDiagnosticReport::Either& value)
+{
+    if (value.first)
+    {
+        Reflect(visitor, value.first.value());
+    }
+    else if (value.second)
+    {
+        Reflect(visitor, value.second.value());
+    }
+    else
+    {
+        // Neither arm engaged: emit nothing extra so the serializer still
+        // writes a well-formed response object (the caller answered without
+        // a report, which is the code-action empty-result convention).
     }
 }
 

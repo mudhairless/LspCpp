@@ -236,6 +236,104 @@ void TestWorkspaceEditAndDiagnosticRoundTrip()
         "diagnostic tags must round-trip");
 }
 
+void TestDocumentDiagnosticReportEitherVariants()
+{
+    // A full report with items, a resultId, and related documents: the wire
+    // shape of LSP 3.17's RelatedFullDocumentDiagnosticReport.
+    FullDocumentDiagnosticReport full;
+    full.resultId = std::string("pd-1");
+    lsDiagnostic item;
+    item.range = lsRange(lsPosition(0, 0), lsPosition(0, 4));
+    item.severity = lsDiagnosticSeverity::Error;
+    item.message = "syntax error";
+    full.items.push_back(item);
+    RelatedDocumentDiagnosticReport related;
+    related.resultId = std::string("pd-1-bi");
+    related.items.push_back(item);
+    full.relatedDocuments = std::map<std::string, RelatedDocumentDiagnosticReport>();
+    (*full.relatedDocuments)["file:///tmp/lib.bi"] = related;
+
+    std::string const full_json = SerializeJson(full);
+    Expect(
+        full_json.find("\"kind\":\"full\"") != std::string::npos,
+        "full report must serialize its kind");
+    Expect(
+        full_json.find("\"resultId\":\"pd-1\"") != std::string::npos,
+        "full report must serialize its resultId");
+    Expect(
+        full_json.find("\"relatedDocuments\":{\"file:///tmp/lib.bi\":{") !=
+            std::string::npos,
+        "full report must serialize the related documents map");
+    Expect(
+        full_json.find("\"kind\":\"full\",\"resultId\":\"pd-1-bi\"") !=
+            std::string::npos,
+        "related document value must serialize as a full report");
+
+    FullDocumentDiagnosticReport const full_copy = RoundTrip(full);
+    Expect(
+        full_copy.relatedDocuments &&
+            full_copy.relatedDocuments->count("file:///tmp/lib.bi") == 1,
+        "full report relatedDocuments must survive round-trip");
+    Expect(
+        full_copy.relatedDocuments && full_copy.relatedDocuments->at("file:///tmp/lib.bi").resultId ==
+            std::string("pd-1-bi"),
+        "related document resultId must survive round-trip");
+
+    // An unchanged report: kind, resultId, and nothing else. The spec's
+    // UnchangedDocumentDiagnosticReport has no items member, so none may be
+    // written.
+    UnchangedDocumentDiagnosticReport unchanged;
+    unchanged.resultId = std::string("pd-1");
+    std::string const unchanged_json = SerializeJson(unchanged);
+    Expect(
+        unchanged_json == R"({"kind":"unchanged","resultId":"pd-1"})",
+        "unchanged report must serialize kind and resultId only");
+    UnchangedDocumentDiagnosticReport const unchanged_copy = RoundTrip(unchanged);
+    Expect(
+        unchanged_copy.kind == "unchanged" && unchanged_copy.resultId == std::string("pd-1"),
+        "unchanged report must round-trip");
+
+    // The Either union: the kind member picks the arm on read, and each arm
+    // writes the shape it holds.
+    DocumentDiagnosticReport::Either full_either;
+    full_either.first = full;
+    std::string const either_full_json = SerializeJson(full_either);
+    Expect(
+        either_full_json.find("\"relatedDocuments\":") != std::string::npos,
+        "full Either arm must carry relatedDocuments to the wire");
+    DocumentDiagnosticReport::Either const full_either_copy = RoundTrip(full_either);
+    Expect(
+        full_either_copy.first && full_either_copy.first->items.size() == 1,
+        "full Either arm must round-trip as the first arm");
+    Expect(!full_either_copy.second, "full Either arm must not populate the unchanged arm");
+
+    DocumentDiagnosticReport::Either unchanged_either;
+    unchanged_either.second = unchanged;
+    std::string const either_unchanged_json = SerializeJson(unchanged_either);
+    Expect(
+        either_unchanged_json == R"({"kind":"unchanged","resultId":"pd-1"})",
+        "unchanged Either arm must write kind and resultId only");
+    DocumentDiagnosticReport::Either const unchanged_either_copy = RoundTrip(unchanged_either);
+    Expect(
+        unchanged_either_copy.second && unchanged_either_copy.second->resultId == std::string("pd-1"),
+        "unchanged Either arm must round-trip as the second arm");
+    Expect(!unchanged_either_copy.first, "unchanged Either arm must not populate the full arm");
+
+    // A client would parse the wire directly: kind "unchanged" must land on
+    // the second arm, anything else on the first.
+    DocumentDiagnosticReport::Either const parsed_unchanged = ParseJson<DocumentDiagnosticReport::Either>(
+        R"({"kind":"unchanged","resultId":"pd-9"})");
+    Expect(
+        parsed_unchanged.second && parsed_unchanged.second->resultId == std::string("pd-9"),
+        "kind=unchanged JSON must parse as the unchanged arm");
+
+    DocumentDiagnosticReport::Either const parsed_full = ParseJson<DocumentDiagnosticReport::Either>(
+        R"({"kind":"full","resultId":"pd-9","items":[]})");
+    Expect(
+        parsed_full.first && parsed_full.first->resultId == std::string("pd-9"),
+        "kind=full JSON must parse as the full arm");
+}
+
 void TestCompletionHoverAndInitializeRoundTrip()
 {
     lsCompletionItem item;
@@ -1713,6 +1811,7 @@ int main(int argc, char** argv)
     RUN_TEST(TestLocationListEitherRoundTrip);
     RUN_TEST(TestCompletionResponseArrayVsList);
     RUN_TEST(TestCodeActionEitherVariants);
+    RUN_TEST(TestDocumentDiagnosticReportEitherVariants);
     RUN_TEST(TestWorkspaceEditDocumentChanges);
     RUN_TEST(TestWatchedFilesOptionsRoundTrip);
     RUN_TEST(TestRegistrationRegisterOptionsRoundTrip);

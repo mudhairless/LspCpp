@@ -1,5 +1,8 @@
 #pragma once
 
+#include <map>
+#include <utility>
+
 #include "LibLsp/JsonRpc/NotificationInMessage.h"
 #include "LibLsp/JsonRpc/RequestInMessage.h"
 #include "LibLsp/JsonRpc/lsResponseMessage.h"
@@ -115,21 +118,71 @@ struct WorkspaceDiagnosticParams
 };
 MAKE_REFLECT_STRUCT(WorkspaceDiagnosticParams, identifier, previousResultIds)
 
+// The value type of `relatedDocuments` (LSP 3.17): one related document's
+// report, which is a full report computed fresh when the server answers (the
+// closure a pull can surface is one level — a related report is never itself
+// related — so the value type stays non-recursive; a value that recursed
+// would need a pointer in the map's value slot).
+struct RelatedDocumentDiagnosticReport
+{
+    std::string kind = "full";
+    optional<std::string> resultId;
+    std::vector<lsDiagnostic> items;
+
+    MAKE_SWAP_METHOD(RelatedDocumentDiagnosticReport, kind, resultId, items)
+};
+MAKE_REFLECT_STRUCT(RelatedDocumentDiagnosticReport, kind, resultId, items)
+
 struct FullDocumentDiagnosticReport
 {
     std::string kind = "full";
     optional<std::string> resultId;
     std::vector<lsDiagnostic> items;
 
-    MAKE_SWAP_METHOD(FullDocumentDiagnosticReport, kind, resultId, items)
+    // Diagnostics of related documents (LSP 3.17): a map of document URI to
+    // that document's report. Present when the document's diagnostics depend
+    // on other documents (an include graph), so a pull on `a.bas` can carry
+    // `b.bi`'s problems alongside its own.
+    optional<std::map<std::string, RelatedDocumentDiagnosticReport>>
+        relatedDocuments;
+
+    MAKE_SWAP_METHOD(FullDocumentDiagnosticReport, kind, resultId, items, relatedDocuments)
 };
-MAKE_REFLECT_STRUCT(FullDocumentDiagnosticReport, kind, resultId, items)
+MAKE_REFLECT_STRUCT(
+    FullDocumentDiagnosticReport, kind, resultId, items, relatedDocuments
+)
+
+// Report kind used when the client's `previousResultId` still names the
+// current result: the report carries only the kind and the (unchanged)
+// resultId, and the client keeps its cached diagnostic list.
+struct UnchangedDocumentDiagnosticReport
+{
+    std::string kind = "unchanged";
+    optional<std::string> resultId;
+
+    MAKE_SWAP_METHOD(UnchangedDocumentDiagnosticReport, kind, resultId)
+};
+MAKE_REFLECT_STRUCT(UnchangedDocumentDiagnosticReport, kind, resultId)
+
+// The `DocumentDiagnosticReport` union (`full` | `unchanged`), discriminated
+// on the wire by the `kind` member. The protocol reflects it into the
+// response of `textDocument/diagnostic` and the per-document report carries in
+// the `workspace/diagnostic` answer.
+struct DocumentDiagnosticReport
+{
+    typedef std::pair<optional<FullDocumentDiagnosticReport>,
+                      optional<UnchangedDocumentDiagnosticReport>>
+        Either;
+};
+
+extern void Reflect(Reader& visitor, DocumentDiagnosticReport::Either& value);
+extern void Reflect(Writer& visitor, DocumentDiagnosticReport::Either& value);
 
 struct WorkspaceDocumentDiagnosticReport
 {
     lsDocumentUri uri;
     optional<int> version;
-    FullDocumentDiagnosticReport report;
+    DocumentDiagnosticReport::Either report;
 
     MAKE_SWAP_METHOD(WorkspaceDocumentDiagnosticReport, uri, version, report)
 };
@@ -171,7 +224,8 @@ struct WorkspaceDiagnosticClientCapabilities
 MAKE_REFLECT_STRUCT(WorkspaceDiagnosticClientCapabilities, refreshSupport)
 
 DEFINE_REQUEST_RESPONSE_TYPE(
-    td_diagnostic, DocumentDiagnosticParams, FullDocumentDiagnosticReport, "textDocument/diagnostic"
+    td_diagnostic, DocumentDiagnosticParams, DocumentDiagnosticReport::Either,
+    "textDocument/diagnostic"
 )
 DEFINE_REQUEST_RESPONSE_TYPE(
     workspace_diagnostic, WorkspaceDiagnosticParams, WorkspaceDiagnosticReport, "workspace/diagnostic"
