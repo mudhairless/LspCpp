@@ -164,6 +164,13 @@ std::shared_ptr<WorkingFile> WorkingFiles::OnOpen(lsTextDocumentItem& open)
 
     auto const& it =
         d_ptr->files.insert({filename, std::make_shared<WorkingFile>(*this, filename, std::move(open.text))});
+    // A first didOpen carries the document version too, and the buffer has to
+    // hold it: a server that reports the version a report was computed for
+    // (LSP 3.17 `WorkspaceDocumentDiagnosticReport.version`) reads it from
+    // here, and a version of 0 is indistinguishable from "unknown". Only the
+    // already-open branch above set it, so the very first open of a document
+    // silently lost it.
+    it.first->second->version = open.version;
     return it.first->second;
 }
 
