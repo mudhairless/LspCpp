@@ -389,6 +389,51 @@ void TestCompletionHoverAndInitializeRoundTrip()
         "initialize response capabilities must round-trip");
 }
 
+void TestInitializeServerInfoRoundTrip()
+{
+    ServerInfo info;
+    info.name = "freebasicd";
+    info.version = "0.7.0";
+
+    ServerInfo const info_copy = RoundTrip(info);
+    Expect(info_copy.name == "freebasicd", "ServerInfo name must round-trip");
+    Expect(
+        info_copy.version && *info_copy.version == "0.7.0",
+        "ServerInfo version must round-trip");
+
+    ServerInfo const parsed = ParseJson<ServerInfo>(R"({"name":"freebasicd","version":"0.7.0"})");
+    Expect(parsed.name == "freebasicd", "ServerInfo must parse canonical LSP JSON");
+    Expect(
+        parsed.version && *parsed.version == "0.7.0",
+        "ServerInfo version must parse from canonical LSP JSON");
+
+    // `version` is optional: an absent or null one must stay unset, and the
+    // writer must omit it rather than emit a null.
+    ServerInfo const nameless_version = ParseJson<ServerInfo>(R"({"name":"freebasicd"})");
+    Expect(nameless_version.name == "freebasicd", "ServerInfo without a version must still parse its name");
+    Expect(!nameless_version.version, "ServerInfo must leave version unset when the JSON omits it");
+    Expect(
+        SerializeJson(nameless_version) == R"({"name":"freebasicd"})",
+        "ServerInfo writer must omit an unset version");
+
+    td_initialize::response response;
+    response.id.set("init-info");
+    response.result.serverInfo = info;
+    td_initialize::response const response_copy = RoundTrip(response);
+    Expect(
+        response_copy.result.serverInfo && response_copy.result.serverInfo->name == "freebasicd" &&
+            response_copy.result.serverInfo->version && *response_copy.result.serverInfo->version == "0.7.0",
+        "initialize response serverInfo must round-trip");
+
+    // Omitted when unset, so a server that does not identify itself sends the
+    // 3.14-shaped result.
+    td_initialize::response bare;
+    bare.id.set("init-bare");
+    Expect(
+        !RoundTrip(bare).result.serverInfo,
+        "initialize response must omit serverInfo when the server sets none");
+}
+
 void TestTextDocumentSyncUnionRoundTrip()
 {
     lsServerCapabilities kind_caps;
@@ -1772,6 +1817,7 @@ int main(int argc, char** argv)
     RUN_TEST(TestPositionRangeLocationAndTextEditRoundTrip);
     RUN_TEST(TestWorkspaceEditAndDiagnosticRoundTrip);
     RUN_TEST(TestCompletionHoverAndInitializeRoundTrip);
+    RUN_TEST(TestInitializeServerInfoRoundTrip);
     RUN_TEST(TestTextDocumentSyncUnionRoundTrip);
     RUN_TEST(TestDocumentUriEscapingRoundTrip);
     RUN_TEST(TestDocumentUriFromPathAndSimpleFileUri);

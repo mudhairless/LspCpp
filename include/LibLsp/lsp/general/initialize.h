@@ -6,15 +6,40 @@
 #include "LibLsp/JsonRpc/RequestInMessage.h"
 
 /**
+ * Information about the server
+ *
+ * @since 3.15.0
+ */
+struct ServerInfo
+{
+    // The name of the server as defined by the server.
+    std::string name;
+    // The server's version as defined by the server.
+    optional<std::string> version;
+
+    MAKE_SWAP_METHOD(ServerInfo, name, version);
+};
+
+MAKE_REFLECT_STRUCT(ServerInfo, name, version);
+
+/**
  * The capabilities the language server provides.
  */
 struct InitializeResult
 {
     lsServerCapabilities capabilities;
-    MAKE_SWAP_METHOD(InitializeResult, capabilities);
+
+    /**
+     * Information about the server.
+     *
+     * @since 3.15.0
+     */
+    optional<ServerInfo> serverInfo;
+
+    MAKE_SWAP_METHOD(InitializeResult, capabilities, serverInfo);
 };
 
-MAKE_REFLECT_STRUCT(InitializeResult, capabilities);
+MAKE_REFLECT_STRUCT(InitializeResult, capabilities, serverInfo);
 
 /**
  * The initialize request is sent as the first request from the client to
